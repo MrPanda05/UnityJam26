@@ -1,355 +1,492 @@
-using System.Collections.Generic;
+using JamUnity.LePlayer.Stats;
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace JamUnity.LePlayer
 {
-
     public class Player : MonoBehaviour
     {
+        [field: SerializeField]
+        public PlayerStats Stats { get; private set; }
+        //Components
         private Rigidbody2D _rig;
-
-        [Header("Movement")]
+        private Collider2D _collider;
+        private ContactPoint2D[] _contacts = new ContactPoint2D[10];
+        private ContactFilter2D _ceilingFilter;
+        private readonly RaycastHit2D[] _ceilingHits = new RaycastHit2D[4];
+        private const float CeilingSkin = 0.02f;
         [SerializeField]
-        private float _acel = 10f;
-        [SerializeField]
-        private float _dcel = 10f;
-        [SerializeField]
-        private float _maxSpeed = 5f;
-        [SerializeField]
-        private bool _deriveAcels = false;
-        [SerializeField]
-        private float _timeToMaxSpeed = 1f;
-        [SerializeField]
-        private float _timeToStop = 1f;
-        [Header("Jump")]
-        [SerializeField]
-        private int _maxJumps = 1;
-        [SerializeField]
-        private float _jumpHeight = 1;
-        [SerializeField]
-        private float _jumpTimeToPeak = .5f;
-        [SerializeField]
-        private float _jumpTimeToGround = .5f;
-        [SerializeField]
-        private float _variableJumpHeight = .5f;
-        [SerializeField]
-        private LayerMask _masks;
-        [SerializeField]
-        private Vector2 _boxSize;
-        [SerializeField]
-        private float _castDistance = 0;
-        [SerializeField]
-        private int _maxFramesToCoyoteJump = 5;
-        [SerializeField]
-        private int _maxFramesToBufferJump = 5;
-        [SerializeField]
-        private float _terminalVelocity = 30;
-
-
-        private float _jumpVelocity;
-        private float _jumpGravity;
-        private float _fallGravity;
-        private float _variableGravity;
-        private Vector2 _moveInput;
-        private Vector2 _velocity;
-        private bool _jumpJustPressed;
-        private bool _jumpPressed;
-        [SerializeField] 
         private InputActionAsset _playerActions;
+
+        [SerializeField]
+        private LayerMask _oneWayLayer;
+        //Inputs
         private InputAction _move;
         private InputAction _jump;
+        private InputAction _down;
+        private Vector2 _moveInput;
+        private bool _jumpRequested;
+        private bool _jumpPressed;
 
-        private bool _isGrounded = false;
-        private bool _wasOnGround = false;
+        private int _playerLayer;
+        private bool _ignoring;
+        private int _bosta;
+
+        private bool _isInside;
+
+        //Movement
+        private Vector2 _velocity;
+        private bool _isGrounded;
+        private bool _wasOnGround;
+        private bool _isOnOneWay;
+        private bool _hitCelling;
+        private bool _countCoyote = false;
+        private bool _countBufferJump = false;
+        private bool _canCoyote = false;
+        private bool _canBuffer = false;
         private int _jumpCount = 0;
-        private int _coyoteFrameCount = 0;
-        private int _bufferFrameCount = 0;
-        private bool _hasGroundJump = false;
-        private bool _hasAirJump = false;
-        private bool _countCoyoteFrames = false;
-        private bool _countBufferFrames = false;
+        private int _frameCountForCoyote = 0;
+        private int _frameCountForJumpBuffer = 0;
 
-        #region Debug
-        [Header("Debug")]
-        [SerializeField] private bool _debugDrawJumps = true;
-        [SerializeField] private bool _debugStartAtMaxSpeed = true;   // running jump vs. standing jump
-        [SerializeField] private float _debugDirection = 1f;          // 1 = right, -1 = left
-        [SerializeField, Range(0f, 1f)] private float _debugHoldTime = 0.2f; // seconds held, for the "variable" arc
-        private struct JumpSim
+
+
+        private void OnDrawGizmos()
         {
-            public List<Vector2> points;
-            public Vector2 apex;
-            public float height;
-            public float distance;
-            public float airTime;
+            if (_collider == null) return;
+            Gizmos.color = _isInside ? Color.green : Color.red;
+            Gizmos.DrawWireCube(_collider.bounds.center, _collider.bounds.size);
         }
 
-        // Mirrors FixedUpdate: step 0 is the jump frame (velocity set, no gravity), then gravity each step.
-        private JumpSim SimulateJump(float holdTime, float dirX)
+        private void Awake()
         {
-            var sim = new JumpSim { points = new List<Vector2>() };
-            float dt = Time.fixedDeltaTime;
-            float acel = _deriveAcels ? _maxSpeed / _timeToMaxSpeed : _acel;
+            _rig = GetComponent<Rigidbody2D>();
+            _collider = GetComponent<Collider2D>();
+            _move = _playerActions.FindAction("Move");
+            _jump = _playerActions.FindAction("Jump");
+            _down = _playerActions.FindAction("Down");
+            _playerLayer = gameObject.layer;
+            _bosta = LayerMask.NameToLayer("OneWay");
+            _ceilingFilter = new ContactFilter2D();
+            _ceilingFilter.useTriggers = false;
+            _ceilingFilter.SetLayerMask(~_oneWayLayer); // one-ways never count as a ceiling
+        }
+        private void Start()
+        {
+            _playerActions.Enable();
+        }
 
-            Vector2 pos = Vector2.zero;
-            Vector2 vel = new Vector2(_debugStartAtMaxSpeed ? dirX * _maxSpeed : 0f, _jumpVelocity);
-            sim.points.Add(pos);
+        private void OnEnable()
+        {
+            _down.canceled += OnDownButtonCanceled;
+        }
 
-            for (int i = 0; i < 1000; i++)
+
+        private void OnDisable()
+        {
+            _down.canceled -= OnDownButtonCanceled;
+
+        }
+
+        private void Update()
+        {
+            GatherInputs();
+        }
+
+        private void GatherInputs()
+        {
+            _moveInput = _move.ReadValue<Vector2>().normalized;
+            if (_jump.WasPressedThisFrame())
             {
-                vel.x = Mathf.MoveTowards(vel.x, dirX * _maxSpeed, acel * dt);
-
-                if (i > 0)
-                {
-                    bool held = (i * dt) < holdTime;
-                    float g = vel.y > 0f ? (held ? _jumpGravity : _variableGravity) : _fallGravity;
-                    vel.y += g * dt;
-                }
-
-                Vector2 prev = pos;
-                pos += vel * dt;
-
-                if (pos.y > sim.height)
-                {
-                    sim.height = pos.y;
-                    sim.apex = pos;
-                }
-
-                if (i > 0 && pos.y <= 0f)
-                {
-                    // Interpolate the exact landing point on flat ground at the start height
-                    float f = prev.y / (prev.y - pos.y);
-                    pos = Vector2.Lerp(prev, pos, f);
-                    sim.points.Add(pos);
-                    sim.airTime = (i + f) * dt;
-                    break;
-                }
-                sim.points.Add(pos);
+                _jumpRequested = true;
             }
-
-            sim.distance = pos.x;
-            return sim;
+            _jumpPressed = _jump.IsPressed();
         }
 
-        private void DrawJump(JumpSim s, Vector3 origin, Color color, string label)
+        private void HandleOneWay()
         {
-            Gizmos.color = color;
-            for (int i = 1; i < s.points.Count; i++)
-                Gizmos.DrawLine(origin + (Vector3)s.points[i - 1], origin + (Vector3)s.points[i]);
-
-#if UNITY_EDITOR
-            UnityEditor.Handles.color = color;
-            UnityEditor.Handles.Label(origin + (Vector3)s.apex + Vector3.up * 0.1f,
-                $"{label}\nh={s.height:F2}  d={Mathf.Abs(s.distance):F2}  t={s.airTime:F2}s");
-#endif
+            bool shouldIgnore = _down.IsPressed() || (_ignoring && _isInside);
+            if (shouldIgnore == _ignoring)
+            {
+                //Just confirming that it is still ignoring
+                Bounds b = _collider.bounds;
+                _isInside = Physics2D.OverlapBox(b.center, b.size, 0f, _oneWayLayer);
+            }
+            _ignoring = shouldIgnore;
+            Physics2D.IgnoreLayerCollision(_playerLayer, _bosta, shouldIgnore);
         }
 
-        private void OnDrawGizmosSelected()
+        private void FixedUpdate()
         {
-            if (!_debugDrawJumps) return;
-
-            ComputeJumpInfo();   // so Inspector tweaks show up without entering play mode
-            float dt = Time.fixedDeltaTime;
-            Vector3 o = transform.position;
-
-            // 1) Pure vertical (no horizontal input), offset in x so the lines don't overlap
-            DrawJump(SimulateJump(dt, 0f), o + Vector3.left * 0.4f, Color.red, "V tap");
-            DrawJump(SimulateJump(_debugHoldTime, 0f), o, Color.yellow, "V hold");
-            DrawJump(SimulateJump(999f, 0f), o + Vector3.right * 0.4f, Color.green, "V max");
-
-            // 2) With horizontal movement: min (1-frame tap), variable (_debugHoldTime), max (full hold)
-            DrawJump(SimulateJump(dt, _debugDirection), o, Color.red, "H tap");
-            DrawJump(SimulateJump(_debugHoldTime, _debugDirection), o, Color.yellow, "H hold");
-            DrawJump(SimulateJump(999f, _debugDirection), o, Color.green, "H max");
+            _wasOnGround = _isGrounded;
+            HandleSpecialJumps();
+            CheckColisions();
+            HandleJump();
+            HandleDirection();
+            HandleGravity();
+            CheckCeilingAhead();
+            ApplyMovement();
+            HandleOneWay();
         }
 
-        [ContextMenu("Print Jump Stats")]
-        private void PrintJumpStats()
+        private void HandleSpecialJumps()
         {
-            ComputeJumpInfo();
-            float dt = Time.fixedDeltaTime;
-            void Log(string n, JumpSim s) =>
-                Debug.Log($"{n}: height={s.height:F2}  distance={Mathf.Abs(s.distance):F2}  airTime={s.airTime:F2}s");
-
-            Log("Vertical tap", SimulateJump(dt, 0f));
-            Log("Vertical hold", SimulateJump(_debugHoldTime, 0f));
-            Log("Vertical max", SimulateJump(999f, 0f));
-            Log("Horizontal tap", SimulateJump(dt, _debugDirection));
-            Log("Horizontal hold", SimulateJump(_debugHoldTime, _debugDirection));
-            Log("Horizontal max", SimulateJump(999f, _debugDirection));
+            if (_wasOnGround && !_countCoyote)
+            {
+                _countCoyote = true;
+                _frameCountForCoyote = 0;
+            }
+            if (_countCoyote)
+            {
+                _frameCountForCoyote++;
+                if (_frameCountForCoyote > Stats.maxFramesToCoyote)
+                {
+                    _countCoyote = false;
+                    _canCoyote = false;
+                    _frameCountForCoyote = 0;
+                }
+                else
+                {
+                    _canCoyote = true;
+                }
+            }
+            if (_countBufferJump)
+            {
+                _frameCountForJumpBuffer++;
+                if (_frameCountForJumpBuffer > Stats.maxFrameToBufferJump)
+                {
+                    _countBufferJump = false;
+                    _canBuffer = false;
+                    _frameCountForJumpBuffer = 0;
+                }
+                else
+                {
+                    _canBuffer = true;
+                }
+            }
         }
 
-        #endregion
         private float GetGravity()
         {
             //Raising
-            if(_velocity.y > 0)
+            if (_velocity.y > 0)
             {
                 //Early release
                 if (!_jumpPressed)
                 {
-                    return _variableGravity;
+                    return Stats.VariableGravity;
                 }
-                return _jumpGravity;
+                return Stats.JumpGravity;
             }
-            return _fallGravity;
+            return Stats.FallGravity;
         }
-        private bool IsGrounded()
-        {
-            //If i'm moving up, i'm not grounded
-            if (_velocity.y > 0) return false;
-            return Physics2D.BoxCast(transform.position, _boxSize, 0, -transform.up, _castDistance, _masks);
-        }
-        private void Jump(bool grounded = true)
-        {
-            //Count jump only for air jumps
-            if (!grounded)
-            {
-                _jumpCount++;
-                _hasAirJump = true;
-            }
-            else
-            {
-                _hasGroundJump = true;
-            }
-            _velocity.y = _jumpVelocity;
-        }
-        private void ComputeJumpInfo()
-        {
-            _jumpVelocity = ((2.0f * _jumpHeight) / _jumpTimeToPeak);
-            _jumpGravity = ((-2.0f * _jumpHeight) / (_jumpTimeToPeak * _jumpTimeToPeak));
-            _fallGravity = ((-2.0f * _jumpHeight) / (_jumpTimeToGround * _jumpTimeToGround));
-            _variableGravity = -(_jumpVelocity * _jumpVelocity) / (2f * _variableJumpHeight);
-        }
-        private void OnDrawGizmos()
-        {
-            Gizmos.DrawWireCube(transform.position-transform.up * _castDistance, _boxSize);
-        }
-        private void Awake()
-        {
-            _rig = GetComponent<Rigidbody2D>();
-            ComputeJumpInfo();
-            _move = _playerActions.FindAction("Move");
-            _jump = _playerActions.FindAction("Jump");
-        }
-        private void Update()
-        {
-            _moveInput = _move.ReadValue<Vector2>().normalized;
-            if(_moveInput.x > 0)
-            {
-                _debugDirection = 1;
-            }
-            if (_moveInput.x < 0)
-            {
-                _debugDirection = -1;
-            }
-            //Update records the input, fixed update will clear it.
-            if (_jump.WasPressedThisFrame())
-            {
-                _jumpJustPressed = true;
-            }
-            _jumpPressed = _jump.IsPressed();
-            if (_deriveAcels)
-            {
-                _acel = _maxSpeed / _timeToMaxSpeed;
-                _dcel = _maxSpeed / _timeToStop;
-            }
-            ComputeJumpInfo();
-        }
-        private void FixedUpdate()
-        {
-            _velocity = _rig.linearVelocity;
-            _wasOnGround = _isGrounded;
-            _isGrounded = IsGrounded();
-            //Horizontal
-            float targetDirX = _moveInput.x * _maxSpeed;
-            float rate = Mathf.Abs(_moveInput.x) > 0.01f ? _acel : _dcel;
-            _velocity.x = Mathf.MoveTowards(_velocity.x, _moveInput.x * _maxSpeed, rate * Time.fixedDeltaTime);
 
-            //Jump cases timers, outside any influence of air or ground
-            if (_countBufferFrames)
+        private void CheckColisions()
+        {
+            _isGrounded = false;
+            _hitCelling = false;
+            _isOnOneWay = false;
+            int contactCount = _rig.GetContacts(_contacts);
+            for (int i = 0; i < contactCount; i++)
             {
-                if(_bufferFrameCount >= _maxFramesToBufferJump)
-                {
-                    print("Stopped buffer jump timer, fail to trigger it");
-                    _bufferFrameCount = 0;
-                    _countBufferFrames = false;
-                    return;
-                }
-                _bufferFrameCount++;
-            }
-            if (_countCoyoteFrames)
-            {
-                if(_coyoteFrameCount >= _maxFramesToCoyoteJump)
-                {
-                    print("Stopped coyote timer, fail to use it");
-                    _coyoteFrameCount = 0;
-                    _countCoyoteFrames = false;
-                    return;
-                }
-                _coyoteFrameCount++;
-            }
-            //air bone
-            if (!_isGrounded)
-            {
-                _velocity.y += GetGravity() * Time.fixedDeltaTime;
-                _velocity.y = Mathf.Clamp(_velocity.y, 0, _terminalVelocity);
-                if (_wasOnGround && !_hasGroundJump)
-                {
-                    _countCoyoteFrames = true;
-                    print("Starting coyote timer");
-                }
-                if (_jumpJustPressed)
-                {
-                    //Coyote time jump, counts as grounded
-                    if(_countCoyoteFrames && _coyoteFrameCount < _maxFramesToCoyoteJump)
-                    {
-                        _jumpJustPressed = false;
-                        _coyoteFrameCount = 0;
-                        _countCoyoteFrames = false;
-                        print("Coyote jump");
-                        Jump();
-                    }
+                Vector2 n = _contacts[i].normal;
+                bool contactIsOneWay = _contacts[i].collider.gameObject.layer == _bosta;
 
-                    //Normal air jump
-                    if(_jumpCount < _maxJumps)
-                    {
-                        _jumpJustPressed = false;
-                        print("Normal air jump");
-                        Jump(false);
-                    }
-                    else
-                    {
-                        //Buffer jump
-                        _countBufferFrames = true;
-                        _jumpJustPressed = false;
-                        print("Start to buffer jump timer");
-                    }
-                    
+                if (Vector2.Angle(Vector2.up, n) <= Stats.maxSlopAngle)
+                {
+                    _isGrounded = true;
+                    _isOnOneWay = contactIsOneWay;
                 }
+                if (Vector2.Dot(n, Vector2.down) > 0.9f && !contactIsOneWay)
+                    _hitCelling = true;
             }
-            //Ground
-            if(_isGrounded)
+            if (_velocity.y > 0f) _isGrounded = false;
+        }
+
+        private void ApplyMovement()
+        {
+            if (_hitCelling)
             {
-                _hasGroundJump = false;
-                _hasAirJump = false;
                 _velocity.y = 0;
-                if (_jumpJustPressed && !_countBufferFrames)
-                {
-                    //clears jump request
-                    _jumpJustPressed = false;
-                    print("Normal ground jump");
-                    Jump();
-                }
-                if (_countBufferFrames && _bufferFrameCount < _maxFramesToBufferJump)
-                {
-                    _jumpJustPressed = false;
-                    print("Buffered jump");
-                    Jump();
-                }
             }
             _rig.linearVelocity = _velocity;
         }
+
+        private void HandleGravity()
+        {
+            if (_isGrounded && _velocity.y <= 0f)
+            {
+                _velocity.y = 0f;
+                return;
+            }
+            _velocity.y += GetGravity() * Time.fixedDeltaTime;
+            _velocity.y = Mathf.Clamp(_velocity.y, -Stats.terminalVelocity, Stats.terminalVelocity);
+        }
+
+        private void HandleJump()
+        {
+
+            if (_isGrounded)
+            {
+                if (_canBuffer)
+                {
+                    _jumpRequested = false;
+                    Jump(true);
+                    print("Buffer jump");
+                    return;
+                }
+                if (_jumpRequested)
+                {
+                    _jumpRequested = false;
+                    Jump(true);
+                    print("Normal ground jump");
+                }
+                return;
+            }
+            //Coyote jump, count as ground jump
+            if (_jumpRequested && _canCoyote)
+            {
+                _jumpRequested = false;
+                Jump(true);
+                print("Coyote jump");
+                return;
+            }
+            if (_jumpRequested)
+            {
+                if (_jumpCount < Stats.maxJumps)
+                {
+                    _jumpRequested = false;
+                    Jump();
+                    print("Normal air jump");
+                }
+                //Start jump buffer count
+                else
+                {
+                    _countBufferJump = true;
+                }
+            }
+        }
+
+        private void Jump(bool groundedJump = false)
+        {
+            if (!groundedJump)
+            {
+                _jumpCount++;
+            }
+            _velocity.y = Stats.JumpVelocity;
+        }
+        private void CheckCeilingAhead()
+        {
+            if (_velocity.y <= 0f) return;
+
+            float dist = _velocity.y * Time.fixedDeltaTime + CeilingSkin;
+            int count = _collider.Cast(Vector2.up, _ceilingFilter, _ceilingHits, dist);
+            for (int i = 0; i < count; i++)
+            {
+                if (_ceilingHits[i].normal.y < -0.9f)
+                {
+                    _velocity.y = 0f;
+                    _hitCelling = true;
+                    return;
+                }
+            }
+        }
+        private void HandleDirection()
+        {
+            float dirX = _moveInput.x * Stats.maxSpeed;
+            float rate = Mathf.Abs(_moveInput.x) > 0.01f ? Stats.Acel : Stats.Decel;
+            _velocity.x = Mathf.MoveTowards(_velocity.x, dirX, rate * Time.fixedDeltaTime);
+        }
+
+        private void OnDownButtonCanceled(InputAction.CallbackContext context)
+        {
+            Bounds b = _collider.bounds;
+            _isInside = Physics2D.OverlapBox(b.center, b.size, 0f, _oneWayLayer);
+            if (_isInside)
+                print("I'm inside a one way");
+            else
+                print("Not inside one way");
+        }
+
+        #region Debug - Jump Reach Preview
+        // Everything in this region is debug only and does not touch the gameplay code above.
+        // It SIMULATES a jump using the same order of operations as FixedUpdate
+        // (Jump -> HandleDirection -> HandleGravity -> physics step) and the values in Stats.
+        //
+        // Select the Player in the Scene view to see the result:
+        //   - Blue    : TAP jump  (jump released right away -> VariableGravity -> minimum)
+        //   - Magenta : HOLD jump (held the whole way up    -> JumpGravity    -> maximum)
+        //   - Solid line    = walking jump starting from standstill
+        //   - Dashed-ish    = walking jump starting already at max speed
+        //   - Vertical jump (no walking) is drawn in the same colours, straight up.
+        // Right click the component header -> "Debug/Print Jump Reach" to log the numbers.
+
+        [Header("Debug - Jump Reach Preview")]
+        [SerializeField] private bool _debugDrawJumpReach = true;
+        [SerializeField] private bool _debugDrawVertical = true;
+        [SerializeField] private bool _debugDrawWalking = true;
+        [SerializeField] private bool _debugWalkRight = true;
+        [SerializeField, Min(0.001f)] private float _debugStepsPerFixed = 1f; // kept at 1 to match FixedUpdate
+        [SerializeField] private Color _debugMinColor = new Color(0.2f, 0.6f, 1f, 1f);
+        [SerializeField] private Color _debugMaxColor = new Color(1f, 0.2f, 0.9f, 1f);
+
+        private struct DebugJumpResult
+        {
+            public float Height;           // highest point above the start
+            public float Distance;         // horizontal distance when back at start height
+            public float AirTime;          // seconds in the air
+            public System.Collections.Generic.List<Vector2> Path;
+        }
+
+        // holdJump:   true = jump button held the whole ascent, false = single tap
+        // walking:    true = holding left/right from the moment of the jump
+        // startSpeedFraction: 0 = start from standstill, 1 = start already at max speed
+        private DebugJumpResult DebugSimulateJump(bool holdJump, bool walking, float startSpeedFraction)
+        {
+            DebugJumpResult result = new DebugJumpResult
+            {
+                Path = new System.Collections.Generic.List<Vector2>()
+            };
+            if (Stats == null) return result;
+
+            float dt = Time.fixedDeltaTime / Mathf.Max(0.001f, _debugStepsPerFixed);
+            Vector2 pos = Vector2.zero;
+            Vector2 vel = new Vector2(walking ? Stats.maxSpeed * startSpeedFraction : 0f, Stats.JumpVelocity);
+            float targetX = walking ? Stats.maxSpeed : 0f;
+            float rate = walking ? Stats.Acel : Stats.Decel;
+
+            result.Path.Add(pos);
+            const int maxSteps = 20000;
+            for (int i = 0; i < maxSteps; i++)
+            {
+                // HandleDirection
+                vel.x = Mathf.MoveTowards(vel.x, targetX, rate * dt);
+
+                // HandleGravity (GetGravity uses the velocity BEFORE it is updated)
+                float g;
+                if (vel.y > 0f) g = holdJump ? Stats.JumpGravity : Stats.VariableGravity;
+                else g = Stats.FallGravity;
+                vel.y += g * dt;
+                vel.y = Mathf.Clamp(vel.y, -Stats.terminalVelocity, Stats.terminalVelocity);
+
+                // Physics step
+                Vector2 prev = pos;
+                pos += vel * dt;
+                result.AirTime += dt;
+
+                if (pos.y > result.Height) result.Height = pos.y;
+
+                // Landed back on the start height: interpolate the exact crossing
+                if (pos.y <= 0f && vel.y <= 0f)
+                {
+                    float t = prev.y / (prev.y - pos.y);
+                    pos = Vector2.Lerp(prev, pos, Mathf.Clamp01(t));
+                    pos.y = 0f;
+                    result.Path.Add(pos);
+                    break;
+                }
+                result.Path.Add(pos);
+            }
+
+            result.Distance = pos.x;
+            return result;
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            if (!_debugDrawJumpReach || Stats == null) return;
+            if(_moveInput.x < 0)
+            {
+                _debugWalkRight = false;
+            }
+            if(_moveInput.x > 0)
+            {
+                _debugWalkRight = true;
+            }
+            Vector2 origin = _collider != null
+                ? new Vector2(_collider.bounds.center.x, _collider.bounds.min.y)
+                : (Vector2)transform.position;
+            float dirSign = _debugWalkRight ? 1f : -1f;
+
+            if (_debugDrawVertical)
+            {
+                DebugDrawResult(DebugSimulateJump(false, false, 0f), origin, 1f, _debugMinColor, "Tap (vertical)");
+                DebugDrawResult(DebugSimulateJump(true, false, 0f), origin, 1f, _debugMaxColor, "Hold (vertical)");
+            }
+
+            if (_debugDrawWalking)
+            {
+                DebugDrawResult(DebugSimulateJump(false, true, 0f), origin, dirSign, _debugMinColor, "Tap + walk (from stop)");
+                DebugDrawResult(DebugSimulateJump(true, true, 0f), origin, dirSign, _debugMaxColor, "Hold + walk (from stop)");
+
+                Color minFast = _debugMinColor; minFast.a = 0.45f;
+                Color maxFast = _debugMaxColor; maxFast.a = 0.45f;
+                DebugDrawResult(DebugSimulateJump(false, true, 1f), origin, dirSign, minFast, "Tap + walk (full speed)");
+                DebugDrawResult(DebugSimulateJump(true, true, 1f), origin, dirSign, maxFast, "Hold + walk (full speed)");
+            }
+        }
+
+        private void DebugDrawResult(DebugJumpResult r, Vector2 origin, float dirSign, Color color, string label)
+        {
+            if (r.Path == null || r.Path.Count < 2) return;
+
+            Gizmos.color = color;
+            for (int i = 1; i < r.Path.Count; i++)
+            {
+                Vector2 a = origin + new Vector2(r.Path[i - 1].x * dirSign, r.Path[i - 1].y);
+                Vector2 b = origin + new Vector2(r.Path[i].x * dirSign, r.Path[i].y);
+                Gizmos.DrawLine(a, b);
+            }
+
+            // Landing marker + apex marker
+            Vector2 land = origin + new Vector2(r.Distance * dirSign, 0f);
+            Gizmos.DrawWireSphere(land, 0.08f);
+
+            Vector2 apex = origin;
+            float best = float.MinValue;
+            for (int i = 0; i < r.Path.Count; i++)
+            {
+                if (r.Path[i].y > best)
+                {
+                    best = r.Path[i].y;
+                    apex = origin + new Vector2(r.Path[i].x * dirSign, r.Path[i].y);
+                }
+            }
+            Gizmos.DrawWireCube(apex, Vector3.one * 0.1f);
+
+#if UNITY_EDITOR
+            UnityEditor.Handles.color = color;
+            UnityEditor.Handles.Label(
+                apex + Vector2.up * 0.15f,
+                $"{label}\nH: {r.Height:0.00}  D: {r.Distance:0.00}  T: {r.AirTime:0.00}s");
+#endif
+        }
+
+        [ContextMenu("Debug/Print Jump Reach")]
+        private void DebugPrintJumpReach()
+        {
+            if (Stats == null)
+            {
+                Debug.LogWarning("[JumpReach] Stats is not assigned.");
+                return;
+            }
+
+            DebugJumpResult vMin = DebugSimulateJump(false, false, 0f);
+            DebugJumpResult vMax = DebugSimulateJump(true, false, 0f);
+            DebugJumpResult wMin = DebugSimulateJump(false, true, 0f);
+            DebugJumpResult wMax = DebugSimulateJump(true, true, 0f);
+            DebugJumpResult fMin = DebugSimulateJump(false, true, 1f);
+            DebugJumpResult fMax = DebugSimulateJump(true, true, 1f);
+
+            Debug.Log(
+                "[JumpReach] (world units, single ground jump)\n" +
+                $"Vertical            -> Min H: {vMin.Height:0.00}  | Max H: {vMax.Height:0.00}\n" +
+                $"Walk (from stop)    -> Min H: {wMin.Height:0.00} D: {wMin.Distance:0.00} T: {wMin.AirTime:0.00}s  | " +
+                $"Max H: {wMax.Height:0.00} D: {wMax.Distance:0.00} T: {wMax.AirTime:0.00}s\n" +
+                $"Walk (full speed)   -> Min H: {fMin.Height:0.00} D: {fMin.Distance:0.00} T: {fMin.AirTime:0.00}s  | " +
+                $"Max H: {fMax.Height:0.00} D: {fMax.Distance:0.00} T: {fMax.AirTime:0.00}s",
+                this);
+        }
+        #endregion
     }
 }
