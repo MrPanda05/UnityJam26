@@ -21,6 +21,18 @@ namespace JamUnity.LePlayer.Stats
         public float jumpTimeToGround;
         public float jumpHeightVariable;
         public float terminalVelocity;
+        [Header("Wall Jump")]
+        [SerializeField] 
+        public float wallJumpHorizontalSpeed = 12f;
+        [SerializeField] 
+        public float wallJumpLockTime = 0.15f;
+        [Header("Enemy related")]
+        public float stompKnockback;
+        /// <summary>
+        /// This will only be used to avoid dying while stomping
+        /// </summary>
+        [Header("Other")]
+        public int maxFramesToDie = 5;
         
         public float JumpVelocity => ((2.0f * jumpHeight) / jumpTimeToPeak);
         public float JumpGravity => ((-2.0f * jumpHeight) / (jumpTimeToPeak * jumpTimeToPeak));

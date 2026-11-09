@@ -1,3 +1,4 @@
+using JamUnity.Commons.Components;
 using JamUnity.LePlayer.Stats;
 using System;
 using UnityEngine;
@@ -12,15 +13,22 @@ namespace JamUnity.LePlayer
         //Components
         private Rigidbody2D _rig;
         private Collider2D _collider;
+        [SerializeField]
+        private PlayerFeet _myFeet;
+        [SerializeField]
+        private HurtboxComponent _myHurtbox;
+        //Colisions
         private ContactPoint2D[] _contacts = new ContactPoint2D[10];
         private ContactFilter2D _ceilingFilter;
         private readonly RaycastHit2D[] _ceilingHits = new RaycastHit2D[4];
         private const float CeilingSkin = 0.02f;
         [SerializeField]
         private InputActionAsset _playerActions;
+        
+        private float _wallJumpLockTimer;
 
         [SerializeField]
-        private LayerMask _oneWayLayer;
+        private LayerMask _oneWayLayer, _enemyLayer;
         //Inputs
         private InputAction _move;
         private InputAction _jump;
@@ -37,17 +45,23 @@ namespace JamUnity.LePlayer
 
         //Movement
         private Vector2 _velocity;
+        public Vector2 CurrentVelocity => _velocity;
         private bool _isGrounded;
         private bool _wasOnGround;
         private bool _isOnOneWay;
         private bool _hitCelling;
+        private bool _isOnWall;
         private bool _countCoyote = false;
         private bool _countBufferJump = false;
         private bool _canCoyote = false;
         private bool _canBuffer = false;
+        private bool _countDeathTimer = false;
+        private bool _tookDamageFromEnemy = false;
         private int _jumpCount = 0;
         private int _frameCountForCoyote = 0;
         private int _frameCountForJumpBuffer = 0;
+        private int _frameCountForDeath = 0;
+        private Vector2 _curretnWallNormal;
 
 
 
@@ -69,7 +83,7 @@ namespace JamUnity.LePlayer
             _bosta = LayerMask.NameToLayer("OneWay");
             _ceilingFilter = new ContactFilter2D();
             _ceilingFilter.useTriggers = false;
-            _ceilingFilter.SetLayerMask(~_oneWayLayer); // one-ways never count as a ceiling
+            _ceilingFilter.SetLayerMask(~(_oneWayLayer | _enemyLayer)); // one-ways never count as a ceiling
         }
         private void Start()
         {
@@ -79,12 +93,36 @@ namespace JamUnity.LePlayer
         private void OnEnable()
         {
             _down.canceled += OnDownButtonCanceled;
+            _myFeet.OnEnemyHeadHit += OnEnemyStomp;
+            _myHurtbox.OnHitTaken += HandleHit;
         }
 
+        private void HandleHit()
+        {
+            //Check if it is from enemy
+            _countDeathTimer = true;
+        }
+
+        private void OnEnemyStomp(GameObject head)
+        {
+            if(_countDeathTimer && (_frameCountForDeath <= Stats.maxFramesToDie))
+            {
+                print("Saved due to stomp, would die otherwise");
+                _countDeathTimer = false;
+                _frameCountForDeath = 0;
+
+            }
+            AddUpwordForce(Stats.stompKnockback);
+            //Regenerates a air jump
+            if (_jumpCount > 0) _jumpCount--;
+            //Destroy(head.transform.parent.gameObject);
+        }
 
         private void OnDisable()
         {
             _down.canceled -= OnDownButtonCanceled;
+            _myFeet.OnEnemyHeadHit -= OnEnemyStomp;
+            _myHurtbox.OnHitTaken -= HandleHit;
 
         }
 
@@ -92,7 +130,10 @@ namespace JamUnity.LePlayer
         {
             GatherInputs();
         }
-
+        public void AddUpwordForce(float force)
+        {
+            _velocity.y = force;
+        }
         private void GatherInputs()
         {
             _moveInput = _move.ReadValue<Vector2>().normalized;
@@ -119,6 +160,7 @@ namespace JamUnity.LePlayer
         private void FixedUpdate()
         {
             _wasOnGround = _isGrounded;
+            UpdateDeathTimer();
             HandleSpecialJumps();
             CheckColisions();
             HandleJump();
@@ -127,6 +169,22 @@ namespace JamUnity.LePlayer
             CheckCeilingAhead();
             ApplyMovement();
             HandleOneWay();
+        }
+
+        private void UpdateDeathTimer()
+        {
+            if (_countDeathTimer)
+            {
+                _frameCountForDeath++;
+                if(_frameCountForDeath > Stats.maxFramesToDie)
+                {
+                    print("I died");
+                }
+            }
+            else
+            {
+                _frameCountForDeath = 0;
+            }
         }
 
         private void HandleSpecialJumps()
@@ -186,6 +244,8 @@ namespace JamUnity.LePlayer
             _isGrounded = false;
             _hitCelling = false;
             _isOnOneWay = false;
+            _isOnWall = false;
+            _curretnWallNormal = Vector2.zero;
             int contactCount = _rig.GetContacts(_contacts);
             for (int i = 0; i < contactCount; i++)
             {
@@ -199,6 +259,11 @@ namespace JamUnity.LePlayer
                 }
                 if (Vector2.Dot(n, Vector2.down) > 0.9f && !contactIsOneWay)
                     _hitCelling = true;
+                if (Mathf.Abs(n.x) > 0.9f)
+                {
+                    _curretnWallNormal = n;
+                    _isOnWall = true;
+                }
             }
             if (_velocity.y > 0f) _isGrounded = false;
         }
@@ -228,6 +293,7 @@ namespace JamUnity.LePlayer
 
             if (_isGrounded)
             {
+                _jumpCount = 0;
                 if (_canBuffer)
                 {
                     _jumpRequested = false;
@@ -253,7 +319,16 @@ namespace JamUnity.LePlayer
             }
             if (_jumpRequested)
             {
-                if (_jumpCount < Stats.maxJumps)
+                //Being on wall resets jump count
+                if(_isOnWall && !_isGrounded)
+                {
+                    _jumpRequested = false;
+                    Jump(false, true);
+                    print("WallJump");
+                    return;
+
+                }
+                if ((_jumpCount < Stats.maxJumps) && !_isOnWall)
                 {
                     _jumpRequested = false;
                     Jump();
@@ -263,16 +338,23 @@ namespace JamUnity.LePlayer
                 else
                 {
                     _countBufferJump = true;
+                    _jumpRequested = false;
                 }
             }
         }
 
-        private void Jump(bool groundedJump = false)
+        private void Jump(bool groundedJump = false, bool wallJump = false)
         {
             if (!groundedJump)
-            {
                 _jumpCount++;
+
+            if (wallJump)
+            {
+                _velocity.x = Mathf.Sign(_curretnWallNormal.x) * Stats.wallJumpHorizontalSpeed;
+                _wallJumpLockTimer = Stats.wallJumpLockTime;
+                _jumpCount--;
             }
+
             _velocity.y = Stats.JumpVelocity;
         }
         private void CheckCeilingAhead()
@@ -293,6 +375,11 @@ namespace JamUnity.LePlayer
         }
         private void HandleDirection()
         {
+            if (_wallJumpLockTimer > 0f)
+            {
+                _wallJumpLockTimer -= Time.fixedDeltaTime;
+                return; // keep the impulse untouched
+            }
             float dirX = _moveInput.x * Stats.maxSpeed;
             float rate = Mathf.Abs(_moveInput.x) > 0.01f ? Stats.Acel : Stats.Decel;
             _velocity.x = Mathf.MoveTowards(_velocity.x, dirX, rate * Time.fixedDeltaTime);
@@ -395,7 +482,14 @@ namespace JamUnity.LePlayer
         private void OnDrawGizmosSelected()
         {
             if (!_debugDrawJumpReach || Stats == null) return;
-            if(_moveInput.x < 0)
+            if (_curretnWallNormal != Vector2.zero)
+            {
+                Vector3 origins = _collider != null ? _collider.bounds.center : transform.position;
+
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawLine(origins, origins + (Vector3)_curretnWallNormal);
+            }
+            if (_moveInput.x < 0)
             {
                 _debugWalkRight = false;
             }
