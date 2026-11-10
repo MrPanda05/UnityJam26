@@ -1,5 +1,6 @@
 using JamUnity.Enemies.Brains;
 using JamUnity.Enemies.Stats;
+using System;
 using UnityEngine;
 
 namespace JamUnity.Enemies
@@ -21,8 +22,24 @@ namespace JamUnity.Enemies
 
         private Vector2 _velocity;
         public bool IsGrounded { get; private set; }
+        /// <summary>
+        /// If true, it means that the enemy comes from a spawner
+        /// </summary>
+        public bool IsDisposable {  get; private set; }
 
-        
+        public event Action<BasicEnemy> OnDeath;
+        public event Action<BasicEnemy> OnRespawn;
+
+        public void AlertDeath()
+        {
+            OnDeath?.Invoke(this);
+        }
+        public void AlertRespawn()
+        {
+            OnRespawn?.Invoke(this);
+        }
+
+
         public int GetCurrentContactPoints()
         {
             IsGrounded = false;
@@ -80,6 +97,17 @@ namespace JamUnity.Enemies
             {
                 MyBrain.Think();
             }
+        }
+
+        public virtual void Kill()
+        {
+            gameObject.SetActive(false);
+            AlertDeath();
+        }
+        public virtual void Respawn()
+        {
+            gameObject.SetActive(true);
+            AlertRespawn();
         }
     }
 }

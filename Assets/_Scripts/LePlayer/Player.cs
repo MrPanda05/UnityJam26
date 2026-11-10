@@ -1,4 +1,6 @@
 using JamUnity.Commons.Components;
+using JamUnity.Enemies;
+using JamUnity.Events;
 using JamUnity.LePlayer.Stats;
 using System;
 using UnityEngine;
@@ -6,6 +8,13 @@ using UnityEngine.InputSystem;
 
 namespace JamUnity.LePlayer
 {
+    public enum PlayerStates
+    {
+        Alive,
+        Dead,
+        Paused,
+        Other
+    }
     public class Player : MonoBehaviour
     {
         [field: SerializeField]
@@ -17,6 +26,8 @@ namespace JamUnity.LePlayer
         private PlayerFeet _myFeet;
         [SerializeField]
         private HurtboxComponent _myHurtbox;
+        [field: SerializeField]
+        public PlayerStates CurrentState { get; private set; }
         //Colisions
         private ContactPoint2D[] _contacts = new ContactPoint2D[10];
         private ContactFilter2D _ceilingFilter;
@@ -29,10 +40,15 @@ namespace JamUnity.LePlayer
 
         [SerializeField]
         private LayerMask _oneWayLayer, _enemyLayer;
+        [Header("Events")]
+        [SerializeField]
+        private RespawnEventChannel _respawnChannel;
         //Inputs
         private InputAction _move;
         private InputAction _jump;
         private InputAction _down;
+        private InputAction _restart;
+
         private Vector2 _moveInput;
         private bool _jumpRequested;
         private bool _jumpPressed;
@@ -63,6 +79,7 @@ namespace JamUnity.LePlayer
         private int _frameCountForDeath = 0;
         private Vector2 _curretnWallNormal;
 
+        public static event Action OnRestart;
 
 
         private void OnDrawGizmos()
@@ -79,12 +96,21 @@ namespace JamUnity.LePlayer
             _move = _playerActions.FindAction("Move");
             _jump = _playerActions.FindAction("Jump");
             _down = _playerActions.FindAction("Down");
+            _restart = _playerActions.FindAction("Restart");
             _playerLayer = gameObject.layer;
             _bosta = LayerMask.NameToLayer("OneWay");
             _ceilingFilter = new ContactFilter2D();
             _ceilingFilter.useTriggers = false;
             _ceilingFilter.SetLayerMask(~(_oneWayLayer | _enemyLayer)); // one-ways never count as a ceiling
+            _respawnChannel.OnRespawn += HandleRespawn;
         }
+
+        private void HandleRespawn(Transform spawn)
+        {
+            transform.position = spawn.position;
+            CurrentState = PlayerStates.Alive;
+        }
+
         private void Start()
         {
             _playerActions.Enable();
@@ -115,7 +141,10 @@ namespace JamUnity.LePlayer
             AddUpwordForce(Stats.stompKnockback);
             //Regenerates a air jump
             if (_jumpCount > 0) _jumpCount--;
-            //Destroy(head.transform.parent.gameObject);
+            if(head.transform.parent.gameObject.TryGetComponent<BasicEnemy>(out BasicEnemy enemy))
+            {
+                enemy.Kill();
+            }
         }
 
         private void OnDisable()
@@ -128,7 +157,16 @@ namespace JamUnity.LePlayer
 
         private void Update()
         {
-            GatherInputs();
+            if (_restart.WasPressedThisFrame())
+            {
+                OnRestart?.Invoke();
+            }
+            switch (CurrentState)
+            {
+                case PlayerStates.Alive:
+                GatherInputs();
+                    break;
+            }
         }
         public void AddUpwordForce(float force)
         {
@@ -136,6 +174,7 @@ namespace JamUnity.LePlayer
         }
         private void GatherInputs()
         {
+            
             _moveInput = _move.ReadValue<Vector2>().normalized;
             if (_jump.WasPressedThisFrame())
             {
@@ -159,16 +198,21 @@ namespace JamUnity.LePlayer
 
         private void FixedUpdate()
         {
-            _wasOnGround = _isGrounded;
-            UpdateDeathTimer();
-            HandleSpecialJumps();
-            CheckColisions();
-            HandleJump();
-            HandleDirection();
-            HandleGravity();
-            CheckCeilingAhead();
-            ApplyMovement();
-            HandleOneWay();
+            switch (CurrentState)
+            {
+                case PlayerStates.Alive:
+                    _wasOnGround = _isGrounded;
+                    UpdateDeathTimer();
+                    HandleSpecialJumps();
+                    CheckColisions();
+                    HandleJump();
+                    HandleDirection();
+                    HandleGravity();
+                    CheckCeilingAhead();
+                    ApplyMovement();
+                    HandleOneWay();
+                    break;
+            }
         }
 
         private void UpdateDeathTimer()
@@ -178,6 +222,10 @@ namespace JamUnity.LePlayer
                 _frameCountForDeath++;
                 if(_frameCountForDeath > Stats.maxFramesToDie)
                 {
+                    CurrentState = PlayerStates.Dead;
+                    _frameCountForDeath = 0;
+                    _countDeathTimer = false;
+                    _velocity = Vector2.zero;
                     print("I died");
                 }
             }
