@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Audio;
 using UnityEngine.UI;
 
-namespace TeamPinguim.UI.MatchUI
+namespace JamUnity.UI.MenuUI
 {
     public class VolumeSlider : MonoBehaviour
     {

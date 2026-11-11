@@ -27,8 +27,9 @@ namespace JamUnity.Levels
             foreach (BasicEnemy item in _allDeadEnemies)
             {
                 item.Respawn();
+                //_allActiveEnemies.Add(item);
             }
-            _allActiveEnemies.Clear();
+            _allDeadEnemies.Clear();
         }
         public void ClearDeadEnemies()
         {

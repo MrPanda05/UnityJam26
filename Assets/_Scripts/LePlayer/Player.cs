@@ -1,8 +1,11 @@
+using JamUnity.Commons;
 using JamUnity.Commons.Components;
+using JamUnity.Core;
 using JamUnity.Enemies;
 using JamUnity.Events;
 using JamUnity.LePlayer.Stats;
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -15,7 +18,7 @@ namespace JamUnity.LePlayer
         Paused,
         Other
     }
-    public class Player : MonoBehaviour
+    public class Player : MonoBehaviour, IDiffRule
     {
         [field: SerializeField]
         public PlayerStats Stats { get; private set; }
@@ -78,8 +81,13 @@ namespace JamUnity.LePlayer
         private int _frameCountForJumpBuffer = 0;
         private int _frameCountForDeath = 0;
         private Vector2 _curretnWallNormal;
+        private int _currentLives = 7;
+        public int CurrentLives => _currentLives;
 
         public static event Action OnRestart;
+        public event Action OnDeath;
+        //When life is zero
+        public event Action OnFullDeath;
 
 
         private void OnDrawGizmos()
@@ -103,6 +111,9 @@ namespace JamUnity.LePlayer
             _ceilingFilter.useTriggers = false;
             _ceilingFilter.SetLayerMask(~(_oneWayLayer | _enemyLayer)); // one-ways never count as a ceiling
             _respawnChannel.OnRespawn += HandleRespawn;
+            HandleDiff();
+
+
         }
 
         private void HandleRespawn(Transform spawn)
@@ -114,6 +125,7 @@ namespace JamUnity.LePlayer
         private void Start()
         {
             _playerActions.Enable();
+            GameManager.Instance.StartTimer();
         }
 
         private void OnEnable()
@@ -125,6 +137,7 @@ namespace JamUnity.LePlayer
 
         private void HandleHit()
         {
+            if (CurrentState != PlayerStates.Alive) return;
             //Check if it is from enemy
             _countDeathTimer = true;
         }
@@ -222,17 +235,32 @@ namespace JamUnity.LePlayer
                 _frameCountForDeath++;
                 if(_frameCountForDeath > Stats.maxFramesToDie)
                 {
+                    //Edit thing here
                     CurrentState = PlayerStates.Dead;
                     _frameCountForDeath = 0;
                     _countDeathTimer = false;
                     _velocity = Vector2.zero;
-                    print("I died");
+                    StartCoroutine(DeathRoutine());
                 }
             }
             else
             {
                 _frameCountForDeath = 0;
             }
+        }
+
+        private IEnumerator DeathRoutine()
+        {
+            _currentLives--;
+            if(_currentLives <= 0)
+            {
+                OnFullDeath?.Invoke();
+                yield return null;
+            }
+            OnDeath?.Invoke();
+            yield return new WaitForSeconds(.5f);
+            OnRestart?.Invoke();
+
         }
 
         private void HandleSpecialJumps()
@@ -442,6 +470,21 @@ namespace JamUnity.LePlayer
             else
                 print("Not inside one way");
         }
+        public void HandleDiff()
+        {
+            switch (GameManager.Instance.CurrentGameDiff)
+            {
+                case Diff.Easy:
+                    _currentLives = 9;
+                    break;
+                case Diff.Normal:
+                    _currentLives = 7;
+                    break;
+                case Diff.Hard:
+                    _currentLives = 4;
+                    break;
+            }
+        }
 
         #region Debug - Jump Reach Preview
         // Everything in this region is debug only and does not touch the gameplay code above.
@@ -629,6 +672,7 @@ namespace JamUnity.LePlayer
                 $"Max H: {fMax.Height:0.00} D: {fMax.Distance:0.00} T: {fMax.AirTime:0.00}s",
                 this);
         }
+
         #endregion
     }
 }
