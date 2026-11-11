@@ -18,8 +18,10 @@ namespace JamUnity.LePlayer
         {
             if (_timerText != null)
             {
+                if (GameManager.Instance == null) return;
                 SetLiveText(GameManager.Format(GameManager.Instance.ElapsedTime));
             }
+
         }
     }
 }

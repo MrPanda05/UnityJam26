@@ -14,7 +14,8 @@ namespace JamUnity.Levels
         [SerializeField]
         private RespawnEventChannel _respawnEvent;
 
-        public bool IsPlayerOnCurrentLevel = false;
+        [field:SerializeField]
+        public bool IsPlayerOnCurrentLevel { get; set; } = false;
 
         private void Awake()
         {
@@ -31,6 +32,11 @@ namespace JamUnity.Levels
         private void HandleHitCheckPoint()
         {
             _enemyList.ClearDeadEnemies();
+        }
+
+        public void SetPlayerPosToDefault()
+        {
+            _respawnEvent.RaiseEvent(_checkPointList.GetDefaultPos());
         }
 
         private void HandleRestart()

@@ -17,7 +17,7 @@ MonoBehaviour:
   timeToStop: 0.1
   maxSlopAngle: 30
   maxJumps: 1
-  maxFramesToCoyote: 5
+  maxFramesToCoyote: 8
   maxFrameToBufferJump: 5
   jumpHeight: 5
   jumpTimeToPeak: 0.4
@@ -27,3 +27,4 @@ MonoBehaviour:
   wallJumpHorizontalSpeed: 18
   wallJumpLockTime: 0.22
   stompKnockback: 35
+  maxFramesToDie: 5

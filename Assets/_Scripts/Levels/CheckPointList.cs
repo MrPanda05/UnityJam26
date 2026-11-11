@@ -39,6 +39,10 @@ namespace JamUnity.Levels
             _currentRespawnPosition = instance.transform;
             OnCheckPointHit?.Invoke();
         }
+        public Transform GetDefaultPos()
+        {
+            return _defaultRespawnPosition;
+        }
         public Transform GetCurrentRespawnPosition()
         {
             if( _currentRespawnPosition == null)

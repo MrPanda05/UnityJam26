@@ -10,6 +10,8 @@ namespace JamUnity.UI.MenuUI
         private Diff _diffSetting;
         [SerializeField]
         private TMP_Text _text;
+        [SerializeField]
+        private string _sceneToLoad = "Level1";
 
         private void Awake()
         {
@@ -18,7 +20,7 @@ namespace JamUnity.UI.MenuUI
         public async void LoadGame()
         {
             GameManager.Instance.SetDiff(_diffSetting);
-            await SceneLoader.Instance.LoadSceneAsync("SampleScene", true);
+            await SceneLoader.Instance.LoadSceneAsync(_sceneToLoad, true);
             await SceneLoader.Instance.UnloadSceneAsync("MainMenu");
             await SceneLoader.Instance.LoadSceneAsync("PlayerScene");
         }

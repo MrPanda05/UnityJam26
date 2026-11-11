@@ -78,8 +78,10 @@ namespace JamUnity.Enemies.Brains
                 else if (pos <= min && _currentDir < 0)
                     _currentDir = 1;
             }
-
-            MyEnemy.HandleGravity();
+            if (_xAxis)
+            {
+                MyEnemy.HandleGravity();
+            }
             MyEnemy.MoveHorizontly(_currentDir);
             MyEnemy.ApplyMovement();
             _thinkCount++;

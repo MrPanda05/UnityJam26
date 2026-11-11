@@ -125,7 +125,10 @@ namespace JamUnity.LePlayer
         private void Start()
         {
             _playerActions.Enable();
-            GameManager.Instance.StartTimer();
+            if(GameManager.Instance != null)
+            {
+                GameManager.Instance.StartTimer();
+            }
         }
 
         private void OnEnable()
@@ -472,6 +475,7 @@ namespace JamUnity.LePlayer
         }
         public void HandleDiff()
         {
+            if (GameManager.Instance == null) return;
             switch (GameManager.Instance.CurrentGameDiff)
             {
                 case Diff.Easy:
