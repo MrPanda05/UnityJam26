@@ -983,6 +983,50 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: BasicTileMap_39
+      rect:
+        serializedVersion: 2
+        x: 416
+        y: 448
+        width: 32
+        height: 32
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: d8512d36ff6b8ec49b1f7f7189cfbbcb
+      internalID: 2024576419
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BasicTileMap_40
+      rect:
+        serializedVersion: 2
+        x: 256
+        y: 352
+        width: 32
+        height: 32
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: f18e7cd7a462a4744b58ce0dacb924da
+      internalID: -1899857737
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -1034,7 +1078,9 @@ TextureImporter:
       BasicTileMap_36: -1023989771
       BasicTileMap_37: 1417728088
       BasicTileMap_38: -929221804
+      BasicTileMap_39: 2024576419
       BasicTileMap_4: -171310519
+      BasicTileMap_40: -1899857737
       BasicTileMap_5: 473241474
       BasicTileMap_6: -1629362317
       BasicTileMap_7: 877712638
