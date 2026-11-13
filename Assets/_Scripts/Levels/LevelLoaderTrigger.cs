@@ -14,6 +14,7 @@ namespace JamUnity.Levels
 
         private void OnTriggerEnter2D(Collider2D collision)
         {
+            print("Loading next area");
             LoadScenes();
             UnLoadScenes();
         }
@@ -35,7 +36,7 @@ namespace JamUnity.Levels
 
                 if (!isSceneLoaded)
                 {
-                    await SceneLoader.Instance.LoadSceneAsync(_scenesToLoad[i]);
+                    await SceneLoader.Instance.LoadSceneAsync(_scenesToLoad[i], false, true);
                 }
             }
         }

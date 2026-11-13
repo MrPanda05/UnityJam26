@@ -129,7 +129,7 @@ ScriptedImporter:
   animatedSpriteImportData:
   - name: BasicTileMap
     originalName: 
-    pivot: {x: 1, y: -2.5555556}
+    pivot: {x: 0.5714286, y: -2.5555556}
     alignment: 9
     border: {x: 0, y: 0, z: 0, w: 0}
     customData: 
@@ -137,7 +137,7 @@ ScriptedImporter:
       serializedVersion: 2
       x: 4
       y: 4
-      width: 256
+      width: 448
       height: 144
     spriteID: 9bd19ede84c446a4ea92030272a9c0a4
     spriteBone: []
@@ -169,7 +169,7 @@ ScriptedImporter:
       cellRect:
         x: 0
         y: 368
-        width: 256
+        width: 448
         height: 144
       spriteId: 9bd19ede84c446a4ea92030272a9c0a4
     linkedCells: []

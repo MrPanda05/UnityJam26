@@ -1,5 +1,12 @@
+using JamUnity.LePlayer;
+using JamUnity.Levels;
+using NUnit.Framework;
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace JamUnity.Core
 {
@@ -20,6 +27,11 @@ namespace JamUnity.Core
 
         public bool IsRunning { get; private set; } = false;
 
+        public float FinalTime { get; private set; }
+
+        [SerializeField]
+        private GameObject _gameOverScreen;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -29,10 +41,66 @@ namespace JamUnity.Core
             }
             Instance = this;
         }
+        private void Start()
+        {
+            Player.OnFullDeath += HandleGameOver;
+            WinFlag.OnGameWon += HandleGameWin;
+        }
+
+        private async void HandleGameWin()
+        {
+            Stop();
+            FinalTime = ElapsedTime;
+            await SceneLoader.Instance.UnloadSceneAsync("PlayerScene");
+            await SceneLoader.Instance.LoadSceneAsync("EndScreen");
+            DeloadAllLevels();
+        }
+        public async void GoToMainMenu()
+        {
+            await SceneLoader.Instance.SwapAsync("EndScreen","MainMenu");
+        }
+        private void OnDestroy()
+        {
+            Player.OnFullDeath -= HandleGameOver;
+            WinFlag.OnGameWon -= HandleGameWin;
+
+        }
+        private async void HandleGameOver()
+        {
+            Stop();
+            FinalTime = ElapsedTime;
+            _gameOverScreen.SetActive(true);
+            await SceneLoader.Instance.UnloadSceneAsync("PlayerScene");
+            await SceneLoader.Instance.LoadSceneAsync("MainMenu");
+            DeloadAllLevels();
+            StartCoroutine(GameOverRoutive());
+        }
+        private IEnumerator GameOverRoutive()
+        {
+            yield return new WaitForSeconds(5f);
+            _gameOverScreen.SetActive(false);
+        }
+        private async void DeloadAllLevels()
+        {
+            var sceneList = new List<string>();
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                Scene scene = SceneManager.GetSceneAt(i);
+                sceneList.Add(scene.name);
+            }
+            foreach (var item in sceneList)
+            {
+                if (item.StartsWith("Level"))
+                {
+                    // Do something
+                    await SceneLoader.Instance.UnloadSceneAsync(item);
+                }
+            }
+        }
 
         private void Update()
         {
-            if (IsRunning)
+            if (IsRunning && !SceneLoader.Instance.IsLoading)
             {
                 ElapsedTime += Time.deltaTime;
             }

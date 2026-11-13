@@ -19,8 +19,8 @@ TagManager:
   - CheckPoint
   - LevelLoader
   - LevelArea
-  - 
-  - 
+  - KillTrigger
+  - WinFlag
   - 
   - 
   - 

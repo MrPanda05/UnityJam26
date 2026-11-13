@@ -1,3 +1,4 @@
+using JamUnity.UI.MenuUI;
 using System;
 using System.Threading.Tasks;
 using Unity.VectorGraphics;
@@ -11,17 +12,19 @@ namespace JamUnity.Core
         public static SceneLoader Instance { get; private set; }
 
         public bool IsLoading { get; private set; } = false;
+        public bool LoadMain = false;
 
         private void Awake()
         {
-            if(Instance != null && Instance != this)
+            Application.backgroundLoadingPriority = ThreadPriority.Low;
+            if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
             Instance = this;
         }
-        public async Awaitable LoadSceneAsync(string newScene, bool setActive = false)
+        public async Awaitable LoadSceneAsync(string newScene, bool setActive = false, bool showLoading = false)
         {
             if (SceneManager.GetSceneByName(newScene).isLoaded) return;
             IsLoading = true;
@@ -29,6 +32,10 @@ namespace JamUnity.Core
             {
                 var op = SceneManager.LoadSceneAsync(newScene, LoadSceneMode.Additive);
                 if (op == null) return;
+                if (showLoading)
+                {
+                    LoadingScreenManager.Instance.Show();
+                }
                 await op;
                 if (setActive)
                 {
@@ -37,6 +44,10 @@ namespace JamUnity.Core
             }
             finally
             {
+                if (showLoading)
+                {
+                    LoadingScreenManager.Instance.Hide();
+                }
                 IsLoading = false;
             }
         }
@@ -56,8 +67,10 @@ namespace JamUnity.Core
         }
         private async void Start()
         {
+            if (!LoadMain) return;
             try
             {
+                await LoadSceneAsync("LoadingScreen");
                 await LoadSceneAsync("MainMenu");
             }
             catch (Exception e)

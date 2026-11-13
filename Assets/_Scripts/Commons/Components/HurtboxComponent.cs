@@ -5,11 +5,10 @@ namespace JamUnity.Commons.Components
 {
     public class HurtboxComponent : MonoBehaviour
     {
-        public event Action OnHitTaken;
-        public void TakeHit()
+        public event Action<HitType> OnHitTaken;
+        public void TakeHit(HitType type)
         {
-            print("Ouch");
-            OnHitTaken?.Invoke();
+            OnHitTaken?.Invoke(type);
         }
     }
 }

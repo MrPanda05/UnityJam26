@@ -19,6 +19,10 @@ namespace JamUnity.LePlayer
         {
             _player.OnDeath -= HandleDeath;
         }
+        private void Start()
+        {
+            _healthUI.SetLiveText(_player.CurrentLives.ToString());
+        }
 
         private void HandleDeath()
         {

@@ -4,6 +4,7 @@ using JamUnity.Core;
 using JamUnity.Enemies;
 using JamUnity.Events;
 using JamUnity.LePlayer.Stats;
+using JamUnity.UI.MenuUI;
 using System;
 using System.Collections;
 using UnityEngine;
@@ -20,6 +21,8 @@ namespace JamUnity.LePlayer
     }
     public class Player : MonoBehaviour, IDiffRule
     {
+        [SerializeField]
+        private PlayerAnimPlayer _playerAnim;
         [field: SerializeField]
         public PlayerStats Stats { get; private set; }
         //Components
@@ -46,6 +49,9 @@ namespace JamUnity.LePlayer
         [Header("Events")]
         [SerializeField]
         private RespawnEventChannel _respawnChannel;
+        [Header("Particles")]
+        [SerializeField]
+        private ParticleSystem _doubleJumpParticles;
         //Inputs
         private InputAction _move;
         private InputAction _jump;
@@ -87,7 +93,7 @@ namespace JamUnity.LePlayer
         public static event Action OnRestart;
         public event Action OnDeath;
         //When life is zero
-        public event Action OnFullDeath;
+        public static event Action OnFullDeath;
 
 
         private void OnDrawGizmos()
@@ -99,6 +105,8 @@ namespace JamUnity.LePlayer
 
         private void Awake()
         {
+            LoadingScreenManager.OnLoadingScreenStart += HandleLoadingScreenStart;
+            LoadingScreenManager.OnLoadingScreenEnd += HandleLoadingScreenEnd;
             _rig = GetComponent<Rigidbody2D>();
             _collider = GetComponent<Collider2D>();
             _move = _playerActions.FindAction("Move");
@@ -116,12 +124,25 @@ namespace JamUnity.LePlayer
 
         }
 
+        private void HandleLoadingScreenEnd()
+        {
+            CurrentState = PlayerStates.Alive;
+        }
+
+        private void HandleLoadingScreenStart()
+        {
+            CurrentState = PlayerStates.Paused;
+        }
+
         private void HandleRespawn(Transform spawn)
         {
             transform.position = spawn.position;
             CurrentState = PlayerStates.Alive;
         }
-
+        private void OnDestroy()
+        {
+            _respawnChannel.OnRespawn -= HandleRespawn;
+        }
         private void Start()
         {
             _playerActions.Enable();
@@ -138,10 +159,17 @@ namespace JamUnity.LePlayer
             _myHurtbox.OnHitTaken += HandleHit;
         }
 
-        private void HandleHit()
+        private void HandleHit(HitType type)
         {
             if (CurrentState != PlayerStates.Alive) return;
-            //Check if it is from enemy
+            if(type == HitType.KillBox)
+            {
+                CurrentState = PlayerStates.Dead;
+                _velocity = Vector2.zero;
+                _rig.linearVelocity = Vector2.zero;
+                StartCoroutine(DeathRoutine());
+                return;
+            }
             _countDeathTimer = true;
         }
 
@@ -243,6 +271,7 @@ namespace JamUnity.LePlayer
                     _frameCountForDeath = 0;
                     _countDeathTimer = false;
                     _velocity = Vector2.zero;
+                    _rig.linearVelocity = Vector2.zero;
                     StartCoroutine(DeathRoutine());
                 }
             }
@@ -255,6 +284,8 @@ namespace JamUnity.LePlayer
         private IEnumerator DeathRoutine()
         {
             _currentLives--;
+            _velocity = Vector2.zero;
+            
             if(_currentLives <= 0)
             {
                 OnFullDeath?.Invoke();
@@ -377,14 +408,14 @@ namespace JamUnity.LePlayer
                 {
                     _jumpRequested = false;
                     Jump(true);
-                    print("Buffer jump");
+                    //print("Buffer jump");
                     return;
                 }
                 if (_jumpRequested)
                 {
                     _jumpRequested = false;
                     Jump(true);
-                    print("Normal ground jump");
+                    //print("Normal ground jump");
                 }
                 return;
             }
@@ -393,7 +424,7 @@ namespace JamUnity.LePlayer
             {
                 _jumpRequested = false;
                 Jump(true);
-                print("Coyote jump");
+                //print("Coyote jump");
                 return;
             }
             if (_jumpRequested)
@@ -403,7 +434,7 @@ namespace JamUnity.LePlayer
                 {
                     _jumpRequested = false;
                     Jump(false, true);
-                    print("WallJump");
+                    //print("WallJump");
                     return;
 
                 }
@@ -411,7 +442,11 @@ namespace JamUnity.LePlayer
                 {
                     _jumpRequested = false;
                     Jump();
-                    print("Normal air jump");
+                    var instance = Instantiate(_doubleJumpParticles, _myFeet.transform.position, Quaternion.identity);
+                    instance.transform.SetParent(gameObject.transform, false);
+                    instance.transform.localPosition = Vector3.zero;
+                    instance.transform.position = _myFeet.transform.position;
+                    //print("Normal air jump");
                 }
                 //Start jump buffer count
                 else
@@ -454,11 +489,25 @@ namespace JamUnity.LePlayer
         }
         private void HandleDirection()
         {
+            if (_velocity.x < 0)
+            {
+                _playerAnim.Flip(true);
+            }
+            if (_velocity.x > 0)
+            {
+                _playerAnim.Flip(false);
+
+            }
+            if (Mathf.Abs(_velocity.x) > 0.05f)
+                _playerAnim.SetWalkingAnim();
+            else
+                _playerAnim.SetIddleAnim();
             if (_wallJumpLockTimer > 0f)
             {
                 _wallJumpLockTimer -= Time.fixedDeltaTime;
                 return; // keep the impulse untouched
             }
+            
             float dirX = _moveInput.x * Stats.maxSpeed;
             float rate = Mathf.Abs(_moveInput.x) > 0.01f ? Stats.Acel : Stats.Decel;
             _velocity.x = Mathf.MoveTowards(_velocity.x, dirX, rate * Time.fixedDeltaTime);
