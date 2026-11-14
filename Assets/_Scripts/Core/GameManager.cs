@@ -6,6 +6,7 @@ using NUnit.Framework;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Audio;
@@ -67,7 +68,7 @@ namespace JamUnity.Core
             FinalTime = ElapsedTime;
             await SceneLoader.Instance.UnloadSceneAsync("PlayerScene");
             await SceneLoader.Instance.LoadSceneAsync("EndScreen");
-            DeloadAllLevels();
+            await DeloadAllLevels();
         }
         public async void GoToMainMenu()
         {
@@ -85,18 +86,27 @@ namespace JamUnity.Core
             Stop();
             FinalTime = ElapsedTime;
             _gameOverScreen.SetActive(true);
+
             try
             {
-                await Task.Delay(3500, destroyCancellationToken);
+                await WaitUnscaled(3.5f, destroyCancellationToken);
+
                 _gameOverScreen.SetActive(false);
-                DeloadAllLevels();
+                await DeloadAllLevels();
 
                 await SceneLoader.Instance.LoadSceneAsync("MainMenu");
                 await SceneLoader.Instance.UnloadSceneAsync("PlayerScene");
             }
             catch (OperationCanceledException) { }
         }
-        private async void DeloadAllLevels()
+
+        private static async Awaitable WaitUnscaled(float seconds, CancellationToken token)
+        {
+            float end = Time.unscaledTime + seconds;
+            while (Time.unscaledTime < end)
+                await Awaitable.NextFrameAsync(token);
+        }
+        private async Awaitable DeloadAllLevels()
         {
             var sceneList = new List<string>();
             for (int i = 0; i < SceneManager.sceneCount; i++)

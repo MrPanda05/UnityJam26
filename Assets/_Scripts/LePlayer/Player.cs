@@ -230,10 +230,10 @@ namespace JamUnity.LePlayer
 
         private void Update()
         {
-            if (_restart.WasPressedThisFrame())
-            {
-                OnRestart?.Invoke();
-            }
+            //if (_restart.WasPressedThisFrame())
+            //{
+            //    OnRestart?.Invoke();
+            //}
             switch (CurrentState)
             {
                 case PlayerStates.Alive:
@@ -322,11 +322,12 @@ namespace JamUnity.LePlayer
             instance.transform.localPosition = Vector3.zero;
             instance.transform.position = transform.position;
             _trailRenderer.enabled = false;
+            CurrentState = PlayerStates.Dead;
             yield return new WaitForSeconds(.8f);
             if (_currentLives <= 0)
             {
                 OnFullDeath?.Invoke();
-                yield return null;
+                yield break;
             }
             OnDeath?.Invoke();
             yield return new WaitForSeconds(.2f);
