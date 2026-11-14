@@ -14,6 +14,10 @@ namespace JamUnity.LePlayer
         {
             _sprite.flipX = value;
         }
+        public void Hide(bool value)
+        {
+            _sprite.enabled = value;
+        }
         public void SetWalkingAnim()
         {
             _animator.SetBool("IsWalking", true);

@@ -1,4 +1,5 @@
 using JamUnity.Core;
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -11,7 +12,8 @@ namespace JamUnity.Levels
         private string[] _scenesToUnLoad;
         [SerializeField]
         private string[] _scenesToLoad;
-
+        public event Action OnLevelsLoaded;
+        public event Action OnLevelsUnLoaded;
         private void OnTriggerEnter2D(Collider2D collision)
         {
             print("Loading next area");
@@ -21,6 +23,7 @@ namespace JamUnity.Levels
 
         private async void LoadScenes()
         {
+            bool _hasAtLeastOneLevelLoaded = false;
             for (int i = 0; i < _scenesToLoad.Length; i++)
             {
                 bool isSceneLoaded = false;
@@ -36,8 +39,13 @@ namespace JamUnity.Levels
 
                 if (!isSceneLoaded)
                 {
+                    _hasAtLeastOneLevelLoaded = true;
                     await SceneLoader.Instance.LoadSceneAsync(_scenesToLoad[i], false, true);
                 }
+            }
+            if (_hasAtLeastOneLevelLoaded)
+            {
+                OnLevelsLoaded?.Invoke();
             }
         }
         private async void UnLoadScenes()
@@ -53,6 +61,7 @@ namespace JamUnity.Levels
                     }
                 }
             }
+            OnLevelsUnLoaded?.Invoke();
         }
     }
 }

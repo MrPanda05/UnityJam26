@@ -416,7 +416,7 @@ MonoBehaviour:
   _testAudioSource: {fileID: 808966641130478633}
   _grup: {fileID: 24300002, guid: 48255ba78d305a547a8ce335ef9f7693, type: 2}
   _audioMixer: {fileID: 24100000, guid: 48255ba78d305a547a8ce335ef9f7693, type: 2}
-  _defaultVolume: 50
+  _defaultVolume: 25
 --- !u!1 &3106462600905013848
 GameObject:
   m_ObjectHideFlags: 0

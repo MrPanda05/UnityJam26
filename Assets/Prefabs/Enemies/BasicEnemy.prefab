@@ -127,6 +127,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: '::'
   <Stats>k__BackingField: {fileID: 11400000, guid: ab605cbe12013924d8100a2d10f686c2, type: 2}
   _brainScript: {fileID: 5438774759367596923}
+  <AnimPlayer>k__BackingField: {fileID: 6979110303902052378}
+  _deathParticles: {fileID: 1075006761107815644, guid: fa1b0057fe9f469408fdb0485ad072f8, type: 3}
+  _deathSound: {fileID: 9123758845836668282, guid: 273a43ed686a05240b6f292d65c48d37, type: 3}
 --- !u!1 &1196681389918149257
 GameObject:
   m_ObjectHideFlags: 0
@@ -438,6 +441,8 @@ GameObject:
   m_Component:
   - component: {fileID: 8126466816445365670}
   - component: {fileID: 2696056620085054563}
+  - component: {fileID: 5636118110341467767}
+  - component: {fileID: 6979110303902052378}
   m_Layer: 8
   m_Name: Square
   m_TagString: Untagged
@@ -454,9 +459,9 @@ Transform:
   m_GameObject: {fileID: 8334733255818685122}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalPosition: {x: -0.085, y: 0, z: 0}
+  m_LocalScale: {x: 2.7, y: 2.7, z: 2.7}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 5974672826422132086}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -510,7 +515,7 @@ SpriteRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
-  m_Color: {r: 1, g: 0, b: 0, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -519,3 +524,39 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+--- !u!95 &5636118110341467767
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8334733255818685122}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: aa4366bf93a571044910bab689be9e67, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &6979110303902052378
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8334733255818685122}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2860d2e07efcfdf46bf92a6ebc5d295d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.LePlayer.PlayerAnimPlayer
+  _animator: {fileID: 5636118110341467767}
+  _sprite: {fileID: 2696056620085054563}

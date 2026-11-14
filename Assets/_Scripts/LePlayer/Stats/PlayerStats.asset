@@ -12,9 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8b5c4fc9265b0d44aae322afb8627e68, type: 3}
   m_Name: PlayerStats
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.LePlayer.Stats.PlayerStats
-  maxSpeed: 25
-  timeToMaxSpeed: 0.01
-  timeToStop: 0.2
+  groundedMaxSpeed: 25
+  airMaxSpeed: 25
+  timeToMaxSpeedGround: 0.1
+  timeToStopGround: 0.2
+  timeToMaxSpeedAir: 0.08
+  timeToStopAir: 0.6
   maxSlopAngle: 30
   maxJumps: 1
   maxFramesToCoyote: 8
@@ -23,8 +26,8 @@ MonoBehaviour:
   jumpTimeToPeak: 0.4
   jumpTimeToGround: 0.23
   jumpHeightVariable: 2.5
-  terminalVelocity: 250
+  terminalVelocity: 100
   wallJumpHorizontalSpeed: 20
-  wallJumpLockTime: 0.3
-  stompKnockback: 35
+  wallJumpLockTime: 0.21
+  stompKnockback: 20
   maxFramesToDie: 5

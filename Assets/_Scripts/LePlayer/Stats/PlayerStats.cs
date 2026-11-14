@@ -6,11 +6,18 @@ namespace JamUnity.LePlayer.Stats
     public class PlayerStats : ScriptableObject
     {
         [Header("Movement")]
-        public float maxSpeed;
-        public float Acel => maxSpeed/timeToMaxSpeed;
-        public float Decel => maxSpeed/ timeToStop;
-        public float timeToMaxSpeed;
-        public float timeToStop;
+        public float groundedMaxSpeed;
+        public float airMaxSpeed;
+        public float GroundedAcel => groundedMaxSpeed/timeToMaxSpeedGround;
+        public float GroundedDecel => groundedMaxSpeed/ timeToStopGround;
+        public float AirAcel => airMaxSpeed / timeToMaxSpeedAir;
+        public float AirDecel => airMaxSpeed / timeToStopAir;
+
+        public float timeToMaxSpeedGround;
+        public float timeToStopGround;
+
+        public float timeToMaxSpeedAir;
+        public float timeToStopAir;
         public float maxSlopAngle;
         [Header("Jump")]
         public int maxJumps;

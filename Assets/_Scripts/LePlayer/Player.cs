@@ -4,6 +4,7 @@ using JamUnity.Core;
 using JamUnity.Enemies;
 using JamUnity.Events;
 using JamUnity.LePlayer.Stats;
+using JamUnity.Levels;
 using JamUnity.UI.MenuUI;
 using System;
 using System.Collections;
@@ -52,6 +53,22 @@ namespace JamUnity.LePlayer
         [Header("Particles")]
         [SerializeField]
         private ParticleSystem _doubleJumpParticles;
+        [SerializeField]
+        private ParticleSystem _deathParticles;
+        [SerializeField]
+        private TrailRenderer _trailRenderer;
+        [Header("Sound effects")]
+        [SerializeField]
+        private SoundPlayer _groundJumpSFX;
+        [SerializeField]
+        private SoundPlayer _airJumpSFX;
+        [SerializeField]
+        private SoundPlayer _wallJumpSFX;
+        [SerializeField]
+        private SoundPlayer _stompSFX;
+        [SerializeField]
+        private SoundPlayer _deathSFX;
+
         //Inputs
         private InputAction _move;
         private InputAction _jump;
@@ -119,9 +136,17 @@ namespace JamUnity.LePlayer
             _ceilingFilter.useTriggers = false;
             _ceilingFilter.SetLayerMask(~(_oneWayLayer | _enemyLayer)); // one-ways never count as a ceiling
             _respawnChannel.OnRespawn += HandleRespawn;
+            WinFlag.OnGameWon += HandleGameWon;
             HandleDiff();
 
 
+        }
+
+        private void HandleGameWon()
+        {
+            _velocity = Vector2.zero;
+            _rig.linearVelocity = Vector2.zero;
+            CurrentState = PlayerStates.Other;
         }
 
         private void HandleLoadingScreenEnd()
@@ -142,6 +167,10 @@ namespace JamUnity.LePlayer
         private void OnDestroy()
         {
             _respawnChannel.OnRespawn -= HandleRespawn;
+            WinFlag.OnGameWon -= HandleGameWon;
+            LoadingScreenManager.OnLoadingScreenStart -= HandleLoadingScreenStart;
+            LoadingScreenManager.OnLoadingScreenEnd -= HandleLoadingScreenEnd;
+
         }
         private void Start()
         {
@@ -285,14 +314,24 @@ namespace JamUnity.LePlayer
         {
             _currentLives--;
             _velocity = Vector2.zero;
-            
-            if(_currentLives <= 0)
+            _rig.linearVelocity = Vector2.zero;
+            _playerAnim.Hide(false);
+            SoundPlayerManager.Instance.PlaySound(_deathSFX);
+            var instance = Instantiate(_deathParticles, transform.position, Quaternion.identity);
+            instance.transform.SetParent(gameObject.transform, false);
+            instance.transform.localPosition = Vector3.zero;
+            instance.transform.position = transform.position;
+            _trailRenderer.enabled = false;
+            yield return new WaitForSeconds(.8f);
+            if (_currentLives <= 0)
             {
                 OnFullDeath?.Invoke();
                 yield return null;
             }
             OnDeath?.Invoke();
-            yield return new WaitForSeconds(.5f);
+            yield return new WaitForSeconds(.2f);
+            _playerAnim.Hide(true);
+            _trailRenderer.enabled = true;
             OnRestart?.Invoke();
 
         }
@@ -407,6 +446,7 @@ namespace JamUnity.LePlayer
                 if (_canBuffer)
                 {
                     _jumpRequested = false;
+                    SoundPlayerManager.Instance.PlaySound(_groundJumpSFX);
                     Jump(true);
                     //print("Buffer jump");
                     return;
@@ -415,6 +455,8 @@ namespace JamUnity.LePlayer
                 {
                     _jumpRequested = false;
                     Jump(true);
+                    SoundPlayerManager.Instance.PlaySound(_groundJumpSFX);
+
                     //print("Normal ground jump");
                 }
                 return;
@@ -424,6 +466,8 @@ namespace JamUnity.LePlayer
             {
                 _jumpRequested = false;
                 Jump(true);
+                SoundPlayerManager.Instance.PlaySound(_groundJumpSFX);
+
                 //print("Coyote jump");
                 return;
             }
@@ -434,6 +478,8 @@ namespace JamUnity.LePlayer
                 {
                     _jumpRequested = false;
                     Jump(false, true);
+                    SoundPlayerManager.Instance.PlaySound(_wallJumpSFX);
+
                     //print("WallJump");
                     return;
 
@@ -442,6 +488,8 @@ namespace JamUnity.LePlayer
                 {
                     _jumpRequested = false;
                     Jump();
+                    SoundPlayerManager.Instance.PlaySound(_airJumpSFX);
+
                     var instance = Instantiate(_doubleJumpParticles, _myFeet.transform.position, Quaternion.identity);
                     instance.transform.SetParent(gameObject.transform, false);
                     instance.transform.localPosition = Vector3.zero;
@@ -507,9 +555,18 @@ namespace JamUnity.LePlayer
                 _wallJumpLockTimer -= Time.fixedDeltaTime;
                 return; // keep the impulse untouched
             }
-            
-            float dirX = _moveInput.x * Stats.maxSpeed;
-            float rate = Mathf.Abs(_moveInput.x) > 0.01f ? Stats.Acel : Stats.Decel;
+            float dirX = 0;
+            float rate = 0;
+            if (_isGrounded)
+            {
+                dirX = _moveInput.x * Stats.groundedMaxSpeed;
+                rate = Mathf.Abs(_moveInput.x) > 0.01f ? Stats.GroundedAcel : Stats.GroundedDecel;
+            }
+            if (!_isGrounded)
+            {
+                dirX = _moveInput.x * Stats.airMaxSpeed;
+                rate = Mathf.Abs(_moveInput.x) > 0.01f ? Stats.AirAcel : Stats.AirDecel;
+            }
             _velocity.x = Mathf.MoveTowards(_velocity.x, dirX, rate * Time.fixedDeltaTime);
         }
 
@@ -582,9 +639,9 @@ namespace JamUnity.LePlayer
 
             float dt = Time.fixedDeltaTime / Mathf.Max(0.001f, _debugStepsPerFixed);
             Vector2 pos = Vector2.zero;
-            Vector2 vel = new Vector2(walking ? Stats.maxSpeed * startSpeedFraction : 0f, Stats.JumpVelocity);
-            float targetX = walking ? Stats.maxSpeed : 0f;
-            float rate = walking ? Stats.Acel : Stats.Decel;
+            Vector2 vel = new Vector2(walking ? Stats.groundedMaxSpeed * startSpeedFraction : 0f, Stats.JumpVelocity);
+            float targetX = walking ? Stats.groundedMaxSpeed : 0f;
+            float rate = walking ? Stats.GroundedAcel : Stats.GroundedDecel;
 
             result.Path.Add(pos);
             const int maxSteps = 20000;

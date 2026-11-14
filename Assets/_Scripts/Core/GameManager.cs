@@ -1,11 +1,14 @@
+using JamUnity.Commons.Components;
 using JamUnity.LePlayer;
 using JamUnity.Levels;
+using JamUnity.UI.MenuUI;
 using NUnit.Framework;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.SceneManagement;
 
 namespace JamUnity.Core
@@ -31,6 +34,11 @@ namespace JamUnity.Core
 
         [SerializeField]
         private GameObject _gameOverScreen;
+        [SerializeField] private AudioMixer _audioMixer;
+        [SerializeField] private AudioMixerGroup[] _groups;
+        [SerializeField] private float _defaultVolume = 25f;
+        [SerializeField]
+        private PlayMusic _gameOverMusic;
 
         private void Awake()
         {
@@ -45,7 +53,13 @@ namespace JamUnity.Core
         {
             Player.OnFullDeath += HandleGameOver;
             WinFlag.OnGameWon += HandleGameWin;
+            foreach (var group in _groups)
+            {
+                float saved = PlayerPrefs.GetFloat(group.name, _defaultVolume);
+                _audioMixer.SetFloat(group.name, VolumeSlider.ScaleDecibels(saved));
+            }
         }
+        
 
         private async void HandleGameWin()
         {
@@ -67,18 +81,20 @@ namespace JamUnity.Core
         }
         private async void HandleGameOver()
         {
+            _gameOverMusic.PlayMusicThis();
             Stop();
             FinalTime = ElapsedTime;
             _gameOverScreen.SetActive(true);
-            await SceneLoader.Instance.UnloadSceneAsync("PlayerScene");
-            await SceneLoader.Instance.LoadSceneAsync("MainMenu");
-            DeloadAllLevels();
-            StartCoroutine(GameOverRoutive());
-        }
-        private IEnumerator GameOverRoutive()
-        {
-            yield return new WaitForSeconds(5f);
-            _gameOverScreen.SetActive(false);
+            try
+            {
+                await Task.Delay(3500, destroyCancellationToken);
+                _gameOverScreen.SetActive(false);
+                DeloadAllLevels();
+
+                await SceneLoader.Instance.LoadSceneAsync("MainMenu");
+                await SceneLoader.Instance.UnloadSceneAsync("PlayerScene");
+            }
+            catch (OperationCanceledException) { }
         }
         private async void DeloadAllLevels()
         {

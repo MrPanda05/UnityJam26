@@ -1,5 +1,8 @@
+using JamUnity.Commons;
+using JamUnity.Core;
 using JamUnity.Enemies.Brains;
 using JamUnity.Enemies.Stats;
+using JamUnity.LePlayer;
 using System;
 using UnityEngine;
 
@@ -7,11 +10,17 @@ namespace JamUnity.Enemies
 {
     public class BasicEnemy : MonoBehaviour
     {
-        [field:SerializeField]
+        [field: SerializeField]
         public EnemyStats Stats { get; private set; }
 
         [SerializeField]
         private MonoBehaviour _brainScript;
+        [field:SerializeField]
+        public PlayerAnimPlayer AnimPlayer { get; private set; }
+        [SerializeField]
+        private ParticleSystem _deathParticles;
+        [SerializeField]
+        private SoundPlayer _deathSound;
 
         private Rigidbody2D _rig;
         private Collider2D _collider;
@@ -67,6 +76,15 @@ namespace JamUnity.Enemies
 
         public void MoveHorizontly(int dir)
         {
+            if(_velocity.x > 0)
+            {
+                AnimPlayer.Flip(false);
+            }
+            if(_velocity.x < 0)
+            {
+
+                AnimPlayer.Flip(true);
+            }
             _velocity.x = dir * Stats.speed;
         }
         public void ApplyMovement()
@@ -101,6 +119,8 @@ namespace JamUnity.Enemies
 
         public virtual void Kill()
         {
+            var instance = Instantiate(_deathParticles, transform.position, Quaternion.identity);
+            SoundPlayerManager.Instance.PlaySound(_deathSound);
             gameObject.SetActive(false);
             AlertDeath();
         }

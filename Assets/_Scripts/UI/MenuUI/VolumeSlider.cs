@@ -51,15 +51,12 @@ namespace JamUnity.UI.MenuUI
             _volumeSlider.onValueChanged.RemoveListener(OnVolumeSliderValueChanged);
             _testButton.onClick.RemoveListener(OnTestButtonClicked);
         }
-        public float ScaleDecibels(float value)
+        public static float ScaleDecibels(float value)
         {
-            float scale = 20.0f;
-            float divisor = 50.0f;
-            if(value <= 0.0f)
-            {
-                return -80.0f;
-            }
-            return scale * (float)Math.Log10(value / divisor);
+            const float scale = 20f;
+            const float divisor = 50f;
+            if (value <= 0f) return -80f;
+            return scale * Mathf.Log10(value / divisor);
         }
         private void OnTestButtonClicked()
         {
